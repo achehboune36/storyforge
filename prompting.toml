@@ -1,0 +1,478 @@
+# =============================================================================
+#  StoryForge — image prompting.  This is THE file to tune.
+#
+#  Everything that decides what text reaches the image model lives here: the
+#  quality stack, the tag order, the shot pool, the negatives, the per-rating
+#  content limits and the portrait template. Nothing in backend/*.py carries a
+#  prompt fragment of its own any more.
+#
+#  Edits are picked up on the NEXT image — no restart. A syntax error does not
+#  crash a story: the last good version keeps running and the error shows up
+#  at /api/debug under "prompt_book" and in the image lab.
+#
+#  See it live:  http://127.0.0.1:8100/lab.html  (positive + negative, no story)
+#  Check a parse:  python3 -c "from backend import prompt_book; print(prompt_book.status())"
+#
+#  Textual inversions live in ComfyUI/models/embeddings and are written
+#  `embedding:<filename-without-extension>` — ComfyUI does not accept the bare
+#  A1111 name. Installed: deep_negative_pony, ILXLneg, negativeXL_D.
+#
+#  ---------------------------------------------------------------------------
+#  Rules that were measured, not guessed. Change these knowing the cost:
+#
+#  * NoobAI-XL / Illustrious / Pony are danbooru-TAG models with a CLIP
+#    encoder. They want comma-separated tags. Feeding them prose sentences
+#    produced flat, generic output — the single biggest quality mistake
+#    available here.  (Anima, by contrast, reads through a Qwen-3 LLM encoder
+#    and prefers a hybrid of tags and sentences; that is the "prose" family.)
+#  * Earlier tags carry more weight. The order lists below are the lever.
+#  * CLIP processes 75 tokens per chunk, so a bloated quality stack costs real
+#    description. Dedupe is on for the same reason.
+#  * Weight syntax — (tag:1.3), ((tag)), [tag] — is stripped before it reaches
+#    the model. An LLM encoder reads it as literal punctuation, and the
+#    narrator emits it occasionally despite being told not to.
+#  * At CFG 1 (turbo checkpoints) the negative prompt is nearly inert, which is
+#    why content limits are stated POSITIVELY in [safety] as well. At the CFG 5
+#    this project runs today, the negative is real again — both paths are kept.
+#  * A bare character name confuses identity. Characters always enter the
+#    prompt as their frozen appearance string, never as a name.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+#  Which family of prompt to build.
+#  "auto" picks per checkpoint, using the rules below. Force it to "booru" or
+#  "prose" to test the other style against the model you are running.
+# -----------------------------------------------------------------------------
+[family]
+mode = "auto"
+booru_arch = ["sdxl"]
+booru_keywords = ["noob", "illustrious", "pony", "animagine", "hassaku"]
+
+
+# =============================================================================
+#  BOORU family — NoobAI-XL (what this project runs today)
+# =============================================================================
+[booru]
+strip_weights = false   # CLIP honours (tag:1.2) — leave the narrator's emphasis alone
+# The slots, in the order they are emitted. Drop one, or move it, and the next
+# image follows. Known slots:
+#   quality      the stack below
+#   count        1girl / 1boy / 2girls / no humans, computed from the cast
+#   characters   each present character's frozen appearance, in order
+#   keywords     what the narrator asked for in the [[IMG|...]] directive
+#   shot         one framing tag from the pool, rotated deterministically
+#   style        the story's own style string (stories/*.json)
+#   safety       the positive content clause from [safety]
+order = ["quality", "count", "characters", "keywords", "shot", "style", "safety"]
+
+quality = "masterpiece, best quality, newest, absurdres, highres"
+
+# At most this many characters get their appearance spelled out. More than two
+# specified faces in one image degrades every model tested here.
+max_subjects = 2
+
+# Danbooru framing tags. One is picked per image from (session, turn, slot), so
+# the same moment always renders the same way, and consecutive images of the
+# same room differ. Add or remove freely; order does not matter.
+shots = [
+  "wide shot, scenery",
+  "cowboy shot",
+  "upper body",
+  "close-up, portrait",
+  "from behind",
+  "from side",
+  "from below",
+  "dutch angle",
+]
+
+# The count tags. Danbooru vocabulary — the model knows these exactly.
+[booru.count]
+none = "no humans"      # emitted when no character is in frame
+solo = "solo"           # appended when exactly one character is in frame
+
+
+# =============================================================================
+#  PROSE family — Anima and other LLM-encoder models. Not in use right now;
+#  kept working so a checkpoint swap is a config change, not a code change.
+# =============================================================================
+[prose]
+strip_weights = true    # a Qwen-3 encoder renders weight syntax as punctuation
+order = ["quality", "count", "characters", "keywords", "shot", "style", "safety"]
+max_subjects = 2
+# Ends the prompt with a full stop, since this family reads sentences.
+terminator = "."
+# One clause per character. A FLUX-class encoder binds attributes to whoever
+# they are attached to, so "Person 1: ... Person 2: ..." keeps the knight's
+# armour off the priest. Empty string restores the flat comma list.
+character_template = "Person {n} is {tags}"
+
+shots = [
+  "wide establishing shot",
+  "medium shot",
+  "close-up",
+  "over the shoulder",
+  "low angle",
+  "from behind",
+]
+
+# Quality anchors by checkpoint. The key is matched as a substring of the
+# filename, first hit wins — so "turbo" catches anima-turbo-v1.1.safetensors.
+# Turbo is CFG 1 and gains nothing from anchors; aesthetic builds had their
+# captions stripped, so score tags do nothing there either.
+[prose.quality_by_variant]
+turbo = ""
+aesthetic = ""
+base = "masterpiece, best quality"
+"2.9b" = "masterpiece, best quality"
+
+# Count phrasing for a model that reads language rather than tags.
+[prose.count]
+solo = "solo"
+few = "{n} characters"   # 2-4 characters
+crowd = "crowd"          # 5 or more
+
+
+# =============================================================================
+#  NEGATIVES — what the model must not draw.
+#
+#  Final negative = the rating's line + the story's own `negative` field
+#  (stories/*.json) + baseline, in that order.
+#
+#  Note: several stories carry a `negative` that repeats most of `baseline`.
+#  Harmless but wasteful — trim the story files, not this one.
+# =============================================================================
+[negative]
+baseline = """
+lowres, worst quality, bad anatomy, bad hands, extra fingers, missing fingers, \
+deformed, mutated, watermark, signature, text, jpeg artifacts"""
+
+all = """
+nsfw, nudity, nude, suggestive, sexual, lingerie, cleavage, gore, blood, \
+wound, injury, corpse, violence, weapon aimed at viewer, smoking, cigarette, \
+alcohol, drugs, frightening, horror"""
+
+"13+" = """
+nsfw, nudity, nude, explicit, sexual, lingerie, cleavage, gore, graphic blood, \
+dismemberment, corpse, torture"""
+
+"18+" = ""
+
+# Honour the per-story `negative` field. Turn off to test this file alone.
+use_story_extra = true
+
+
+# =============================================================================
+#  SAFETY — the same limits stated as what the picture SHOULD contain.
+#  Goes into the POSITIVE prompt. Empty for 18+.
+# =============================================================================
+[safety]
+all = "fully clothed, modest clothing, wholesome, gentle, safe for work, no blood"
+"13+" = "fully clothed, safe for work"
+"18+" = ""
+
+
+# =============================================================================
+#  PORTRAITS — the reference shot each character gets on first appearance.
+#  PuLID locks every later scene of that character to this face, so it wants a
+#  plain, well-lit, front-facing head-and-shoulders and nothing else.
+#  Placeholders: {appearance} {style}
+# =============================================================================
+[portrait]
+template = """
+solo, upper body portrait, facing viewer, neutral expression, plain simple \
+background, even lighting, {appearance}, {style}"""
+
+# Portraits are reference material, not illustration — the scene's rating
+# negative still applies, but the shot pool and keywords never do.
+
+
+# =============================================================================
+#  SANITISING — applied to everything before it leaves.
+# =============================================================================
+[sanitize]
+# Global default. Overridden per family below, because it depends entirely on
+# the encoder: SDXL/CLIP models read (tag:1.3) as real attention weighting,
+# while an LLM encoder reads it as literal punctuation and wastes tokens.
+strip_weights = false   # (tag:1.3), ((tag)), [tag] -> tag
+dedupe = true           # drop repeated tags, keeping the first (strongest) position
+dedupe_negative = true  # a story's own `negative`, a model's negative_extra and
+                        # [negative].baseline overlap heavily — "signature" was
+                        # landing three times, burning a 75-token CLIP chunk.
+                        # Turn off to send every fragment verbatim.
+
+
+# =============================================================================
+#  RESOLUTIONS — the frame shapes a directive may ask for.
+#
+#  The narrator names one of these words in the third field of an [[IMG]]
+#  directive ("from side, wide shot, landscape") and the image is rendered at
+#  that shape. Nothing named, or a word not listed here, falls back to the
+#  model's own width/height.
+#
+#  These are the SDXL buckets; each is ~1 megapixel, which is what SDXL was
+#  trained on. Other sizes work but drift. A model table may override them
+#  with its own [models."…".resolutions] (SD1.5 wants roughly half these).
+# =============================================================================
+[resolutions]
+default = "portrait"
+
+[resolutions.sizes]
+ultrawide = [1536, 640]
+wide      = [1344, 768]
+landscape = [1216, 832]
+square    = [1024, 1024]
+portrait  = [832, 1216]
+tall      = [768, 1344]
+
+
+# =============================================================================
+#  MODELS — one table per checkpoint, keyed by its exact filename.
+#
+#  Everything here is OPTIONAL and overrides config.json / the family defaults
+#  for that checkpoint only. Switch the active model in the reading view or in
+#  the image lab; what you pick is remembered in data/active_model.json.
+#
+#  Keys:  label  arch  family  order  quality  negative_extra
+#         steps  cfg  sampler  scheduler  sampling  width  height  notes
+#
+#  A checkpoint with no table here still works — it just uses the family
+#  defaults above and config.json's generation settings.
+# =============================================================================
+
+[models."NoobAI-XL-v1.1.safetensors"]
+label = "NoobAI-XL v1.1"
+arch = "sdxl"
+family = "booru"
+steps = 28
+cfg = 5.0
+sampler = "euler_ancestral"
+scheduler = "normal"
+sampling = "eps"          # MEASURED: v1.1 is eps. v_prediction renders grey.
+width = 832
+height = 1216
+# The same embeddings are installed and dimension-compatible here, but they
+# were tuned against Hassaku. Uncomment to try them on NoobAI:
+# negative_extra = "embedding:deep_negative_pony, embedding:ILXLneg, embedding:negativeXL_D"
+notes = "The default. Danbooru tags, full quality stack, eps-prediction."
+
+[models."hassakuXLIllustrious_v32.safetensors"]
+label = "Hassaku XL (Illustrious) v3.2"
+arch = "sdxl"
+family = "booru"
+steps = 28
+cfg = 7.0                 # TESTED in the lab: 7 beat the creator's 6
+sampler = "euler_ancestral"
+scheduler = "normal"
+sampling = "eps"          # verified: no v_pred key in the checkpoint
+width = 832               # creator: "832 x 1216 (most recommended)", confirmed
+height = 1216
+# TESTED in the lab. The score ladder is Pony vocabulary and the creator says
+# danbooru metadata was not trained in, so on paper neither belongs here —
+# but this is what actually produced the better images, and the image wins.
+quality = "score_9, score_8_up, score_7_up, intricate details"
+# TESTED in the lab. The three `embedding:` names are textual inversions now
+# installed in ComfyUI/models/embeddings (deep_negative_pony 64 tokens,
+# ILXLneg 75, negativeXL_D 16 — all SDXL dual-encoder, verified). A/B/C at a
+# fixed seed: words alone gave stiff mannequins with hidden hands; adding
+# deep_negative_pony cleaned the shading; all three together was clearly best
+# — hands rendered, the characters interacted, less orange cast.
+# `safe_neg` is GONE: no public embedding by that name exists, so it was only
+# ever a word CLIP had to guess at.
+negative_extra = "embedding:deep_negative_pony, embedding:ILXLneg, embedding:negativeXL_D, (worst quality, low quality, logo, text, watermark), score_4, score_5, nose, english text, title, border, frame, speech bubble"
+# The creator's documented tag order: count, then who, then everything else —
+# quality tags come late, unlike NoobAI.
+order = ["count", "characters", "keywords", "quality", "shot", "style", "safety"]
+notes = "Civitai 140272 v3.2 (Ikena). Bright, distinct anime style; stabler characters than 3.1, slightly less prompt freedom. Avoid franchise tags."
+
+[models."noobaiXLNAIXL_vPred10Version.safetensors"]
+label = "NoobAI-XL v-pred 1.0"
+arch = "sdxl"
+family = "booru"
+steps = 28
+cfg = 5.0
+sampler = "euler_ancestral"
+scheduler = "normal"
+sampling = "v_prediction" # REQUIRED for this one, or output is grey mush
+width = 832
+height = 1216
+notes = "Deeper contrast than v1.1, ~50% slower (33.6s vs 22.7s measured)."
+
+[models."autismmixSDXL_autismmixDPO.safetensors"]
+label = "AutismMix SDXL (DPO)"
+arch = "sdxl"
+family = "booru"
+steps = 26
+cfg = 5.5
+sampler = "euler_ancestral"
+scheduler = "normal"
+sampling = "eps"
+width = 832
+height = 1216
+# Pony-lineage: the score ladder is its quality stack.
+quality = "score_9, score_8_up, score_7_up, masterpiece, best quality"
+notes = "Pony-derived. UNTESTED here — the score tags are the convention, tune them."
+
+[models."juggernautXL_v11.safetensors"]
+label = "Juggernaut XL v11"
+arch = "sdxl"
+family = "prose"          # photoreal, reads sentences better than tag soup
+steps = 30
+cfg = 4.5
+sampler = "dpmpp_2m"
+scheduler = "karras"
+sampling = "eps"
+width = 832
+height = 1216
+notes = "Photoreal, not anime. UNTESTED here."
+
+[models."dreamshaperXL_lightningDPMSDE.safetensors"]
+label = "DreamShaper XL Lightning"
+arch = "sdxl"
+family = "prose"
+steps = 8                 # lightning: 4-8 steps, low CFG, or it burns
+cfg = 2.0
+sampler = "dpmpp_sde"
+scheduler = "karras"
+sampling = "eps"
+width = 832
+height = 1216
+notes = "Lightning merge — very fast, low CFG. UNTESTED here."
+
+[models."flux-2-klein-9b-Q6_K.gguf"]
+label = "FLUX 2 Klein 9B (composer)"
+arch = "klein"
+family = "prose"
+clip = "Qwen3-8B-Q6_K.gguf"          # MUST match the model: 9B takes the 8B encoder
+clip_type = "flux2"
+vae = "flux2-vae.safetensors"
+steps = 20
+cfg = 1.0                 # distilled: the negative is inert at CFG 1
+sampler = "euler"
+scheduler = "simple"
+width = 832
+height = 1216
+max_subjects = 4
+# The reason this model is here: it was the only one that kept three
+# characters in their own clothes. It does NOT have the style the reader
+# chose, so it composes and Anima repaints.
+hires_model = "hosekiLustrousmixAnima_animaV10.safetensors"
+hires_scale = 1.5
+hires_steps = 25
+hires_denoise = 0.5       # higher than a same-model refine: this is a restyle
+hires_method = "nearest-exact"
+notes = "Measured 90s warm / 169s cold at 1216x832. Composes correctly, wrong style — pair it with the Anima repaint."
+
+[models."flux-2-klein-4b-Q8_0.gguf"]
+label = "FLUX 2 Klein 4B (faster composer)"
+arch = "klein"
+family = "prose"
+clip = "Qwen3-4B-Q6_K.gguf"          # the 4B model needs the 4B encoder
+clip_type = "flux2"
+vae = "flux2-vae.safetensors"
+steps = 20
+cfg = 1.0
+sampler = "euler"
+scheduler = "simple"
+width = 832
+height = 1216
+max_subjects = 4
+hires_model = "hosekiLustrousmixAnima_animaV10.safetensors"
+hires_scale = 1.5
+hires_steps = 25
+hires_denoise = 0.5
+hires_method = "nearest-exact"
+notes = "35s warm / 58s cold. Got two of three characters right where the 9B got all three."
+
+[models."hosekiLustrousmixAnima_animaV10.safetensors"]
+label = "Hoseki LustrousMix (Anima) v1.0"
+arch = "anima"
+# Tag-prompted despite the Qwen3 encoder: the reference image the user picked
+# this model for prompts "masterpiece, best quality, 1girl, solo, …". So the
+# existing danbooru appearances carry over unchanged — no prose rewrite.
+family = "booru"
+# An Anima UNET names its own encoder and VAE. Both were already installed.
+clip = "qwen_3_06b_base.safetensors"
+clip_type = "stable_diffusion"
+vae = "qwen_image_vae.safetensors"
+latent_node = "EmptyLatentImage"   # Wan21 16-channel latent, but via the plain node
+weight_dtype = "default"           # fp8 and GGUF both fail on this arch
+steps = 24                # model page: ER SDE or Euler a, 24 steps, CFG 4-5
+cfg = 4.5
+sampler = "euler_ancestral"
+scheduler = "normal"
+width = 832
+height = 1216
+# Lifted verbatim from the reference image's own embedded ComfyUI metadata.
+quality = "masterpiece, best quality"
+negative_extra = "worst quality, low quality, jpeg artifacts, signature, sepia, fewer digits, extra digits, bad hands, bad anatomy, watermark, censored, score_1, score_2, score_3, high contrast, dark, monochrome, greyscale"
+# Quality leads here, unlike Hassaku — again following the reference prompt.
+order = ["quality", "count", "characters", "keywords", "shot", "style", "safety"]
+# The reference image ran a second pass and it is a large part of why it
+# looks the way it does. It runs AFTER the reader already has the picture:
+# the first pass is shown immediately, this replaces it a couple of minutes
+# later. Set hires_scale = 0 to turn it off.
+# Four, not the family default of two. Two meant that in a four-hander only
+# the first two people got their clothes and faces, and the rest came out
+# dressed like whoever was described first — the knight instructor in
+# clergy robes. The narrator is now told to keep pictures to one or two
+# characters; this is the margin for when it does not.
+max_subjects = 4
+hires_scale = 1.5
+hires_steps = 25
+hires_denoise = 0.48
+hires_method = "nearest-exact"
+notes = "Civitai 941345 Anima v1.0 (Hoseki). The style the user chose from reference images; recipe recovered from style4.png's embedded ComfyUI workflow, hires pass included."
+
+[models."anima_turboV10.safetensors"]
+label = "Anima turbo v1.0"
+arch = "sdxl"
+family = "prose"
+steps = 8
+cfg = 1.0                 # at CFG 1 the negative is nearly inert
+sampler = "euler_ancestral"
+scheduler = "normal"
+sampling = "eps"
+width = 832
+height = 1216
+notes = "The old narrator-era image model, as a single checkpoint. CFG 1: content control has to come from [safety], not the negative."
+
+[models."DreamShaper_8_pruned.safetensors"]
+label = "DreamShaper 8 (SD1.5)"
+arch = "sd15"
+family = "prose"
+steps = 25
+cfg = 7.0
+sampler = "dpmpp_2m"
+scheduler = "karras"
+sampling = "eps"
+width = 512
+height = 768
+notes = "SD1.5. Small and fast, no PuLID. UNTESTED here."
+
+# SD1.5 trained at 512, so its frame shapes are about half the SDXL ones.
+[models."DreamShaper_8_pruned.safetensors".resolutions]
+wide      = [768, 512]
+landscape = [640, 512]
+square    = [512, 512]
+portrait  = [512, 768]
+tall      = [512, 896]
+
+[models."v1-5-pruned-emaonly-fp16.safetensors"]
+label = "Stable Diffusion 1.5"
+arch = "sd15"
+family = "prose"
+steps = 25
+cfg = 7.0
+sampler = "euler_ancestral"
+scheduler = "normal"
+sampling = "eps"
+width = 512
+height = 768
+notes = "The base SD1.5. Here for comparison, not for stories."
+
+[models."v1-5-pruned-emaonly-fp16.safetensors".resolutions]
+wide      = [768, 512]
+landscape = [640, 512]
+square    = [512, 512]
+portrait  = [512, 768]
+tall      = [512, 896]

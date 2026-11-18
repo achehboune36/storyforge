@@ -1,0 +1,43 @@
+{
+  "id": "lighthouse",
+  "title": "The Last Lighthouse",
+  "blurb": "The lamp on Gull Rock has burned for two hundred years. Tonight it went out, and you are the only keeper left.",
+  "rating": "all",
+  "premise": "You are the narrator of The Last Lighthouse, an illustrated interactive story. Second person, present tense. The reader plays Wren, nineteen, apprentice keeper of the lighthouse on Gull Rock, a small island off a cold northern coast. The head keeper, Old Tamsin, rowed to the mainland for supplies three days ago and has not returned. Tonight, for the first time anyone remembers, the great lamp has gone dark, and a ship's bell is ringing somewhere out in the fog. Keep the tone quiet, eerie and hopeful. Never decide what Wren says or does; describe the world and the people in it, then stop and let the reader act.",
+  "world_detail": "Gull Rock is a bare granite island: the lighthouse tower, a keeper's cottage, a boathouse, and a fog bell on an iron frame. The lamp is lit by an old clockwork mechanism that must be wound every four hours. The village of Saltmere is visible across the strait on clear days. Pip is a talkative grey seal who sunbathes on the landing. The fog this season is unusually thick and seems to carry voices.",
+  "style": "storybook illustration, soft watercolor, muted blues and warm lamplight, detailed background",
+  "opening": {
+    "text": "The lamp goes out at 9:14. You know the exact minute because you were watching it, the way Tamsin taught you, and one moment the beam is sweeping the fog and the next there is nothing but the hiss of the sea against the rocks.\n\nYou are standing on the gallery at the top of the tower. Below, the cottage window glows faintly where you left the stove burning. Out in the fog, a ship's bell rings: once, twice, then silence.\n\nThe winding key for the clockwork is still in your coat pocket. The stairs down to the lamp room are dark.",
+    "keywords": "lighthouse gallery at night, thick fog, dark lamp, young keeper in a heavy coat, distant cottage window glowing",
+    "entities": ["wren", "tower"]
+  },
+  "entities": {
+    "wren": {
+      "kind": "character",
+      "role": "The player. Apprentice keeper, careful, a little afraid of the dark.",
+      "appearance": "nineteen, short dark hair under a wool cap, heavy navy oilskin coat, brass winding key on a cord",
+      "gender": "any"
+    },
+    "tamsin": {
+      "kind": "character",
+      "role": "Head keeper, missing for three days. Gruff, kind, keeps a logbook of everything.",
+      "appearance": "elderly woman, weathered face, white braid, thick grey jumper, round spectacles"
+    },
+    "pip": {
+      "kind": "character",
+      "role": "A grey seal who lives on the landing and seems to understand more than she should.",
+      "appearance": "plump grey seal with a white patch over one eye"
+    },
+    "tower": {
+      "kind": "place",
+      "role": "The lighthouse tower and lamp room.",
+      "appearance": "tall white stone tower, spiral iron stairs, great glass lens, brass clockwork gears"
+    },
+    "cottage": {
+      "kind": "place",
+      "role": "The keeper's cottage.",
+      "appearance": "low stone cottage, iron stove, shelves of logbooks, oil lamps, rain on small windows"
+    }
+  },
+  "negative": "text, watermark, signature, blurry, deformed hands, extra fingers, low quality"
+}

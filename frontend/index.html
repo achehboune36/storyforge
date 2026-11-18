@@ -1,0 +1,173 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>StoryForge</title>
+<link rel="stylesheet" href="/style.css">
+
+<div class="wrap">
+  <h1>StoryForge</h1>
+  <p class="sub">Stories you act in, illustrated as you read.</p>
+
+  <h2>Continue</h2>
+  <div id="sessions"><p class="sub">Loading…</p></div>
+
+  <h2>Begin</h2>
+  <div id="stories"><p class="sub">Loading…</p></div>
+
+  <h2>Tools</h2>
+  <div>
+    <a class="card row" href="/lab.html" style="text-decoration:none">
+      <div class="grow"><div class="t">Image lab</div>
+      <div class="b">Try prompts against the image model directly.</div></div>
+    </a>
+    <a class="card row" href="/compose.html" style="text-decoration:none">
+      <div class="grow"><div class="t">New story</div>
+      <div class="b">Define a world and an opening scene.</div></div>
+    </a>
+  </div>
+
+  <h2>System</h2>
+  <div id="debug" class="sub">Checking…</div>
+</div>
+
+<script type="module">
+const el = (h) => { const d = document.createElement('div'); d.innerHTML = h; return d.firstElementChild; };
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+async function load() {
+  const [stories, sessions] = await Promise.all([
+    fetch('/api/stories').then(r => r.json()),
+    fetch('/api/sessions').then(r => r.json()),
+  ]);
+
+  const sBox = document.getElementById('sessions');
+  sBox.innerHTML = '';
+  if (!sessions.length) {
+    sBox.append(el('<p class="sub">No stories in progress.</p>'));
+  }
+  for (const s of sessions) {
+    const d = new Date(s.last_active_at);
+    const when = isNaN(d) ? 'recently' : d.toLocaleString();
+    const card = el(`<div class="card row" role="button" tabindex="0">
+      <div class="grow">
+        <div class="t">${esc(s.title || s.story_title)}</div>
+        <div class="m">last played ${esc(when)}</div>
+      </div>
+      <button class="icon danger" title="Delete this playthrough">Delete</button>
+    </div>`);
+
+    const open = () => location.href = `/read.html?s=${s.id}`;
+    card.onclick = open;
+    card.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
+
+    card.querySelector('.danger').onclick = async (e) => {
+      e.stopPropagation();                       // don't open the story
+      const btn = e.currentTarget;
+      if (btn.dataset.armed !== '1') {
+        // Two-step rather than a confirm() dialog: deletion is permanent and
+        // takes the images with it, so it should need a deliberate second click.
+        btn.dataset.armed = '1';
+        btn.textContent = 'Delete for good?';
+        setTimeout(() => {
+          if (btn.dataset.armed === '1') { btn.dataset.armed = ''; btn.textContent = 'Delete'; }
+        }, 4000);
+        return;
+      }
+      btn.disabled = true; btn.textContent = 'Deleting…';
+      try {
+        const r = await fetch(`/api/sessions/${s.id}`, { method: 'DELETE' });
+        if (!r.ok) throw new Error(await r.text());
+        card.remove();
+        if (!document.querySelectorAll('#sessions .card').length)
+          sBox.append(el('<p class="sub">No stories in progress.</p>'));
+      } catch (err) {
+        btn.disabled = false; btn.textContent = 'Failed — retry';
+      }
+    };
+    sBox.append(card);
+  }
+
+  const box = document.getElementById('stories');
+  box.innerHTML = '';
+  for (const st of stories) {
+    const r = st.rating || '13+';
+    const cls = r === 'all' ? 'r-all' : r === '18+' ? 'r-18' : 'r-13';
+    const lbl = r === 'all' ? 'ALL AGES' : r;
+    const card = el(`<div class="card row" role="button" tabindex="0">
+      <div class="grow">
+        <div class="t">${esc(st.title)}<span class="rating ${cls}">${esc(lbl)}</span></div>
+        <div class="b">${esc(st.blurb || '')}</div>
+        <div class="m"></div>
+      </div>
+      <a class="icon" href="/compose.html?edit=${encodeURIComponent(st.id)}">Edit</a>
+      <button class="icon danger">Delete</button>
+    </div>`);
+
+    const start = async () => {
+      card.querySelector('.m').textContent = 'starting…';
+      const res = await fetch(`/api/sessions?story_id=${encodeURIComponent(st.id)}`,
+                              { method: 'POST' });
+      const sess = await res.json();
+      location.href = `/read.html?s=${sess.id}`;
+    };
+    card.onclick = start;
+    card.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); start(); } };
+    card.querySelector('a.icon').onclick = (e) => e.stopPropagation();
+
+    card.querySelector('.danger').onclick = async (e) => {
+      e.stopPropagation();
+      const btn = e.currentTarget;
+      const del = async (force) =>
+        fetch(`/api/stories/${encodeURIComponent(st.id)}${force ? '?force=true' : ''}`,
+              { method: 'DELETE' });
+
+      if (btn.dataset.armed !== '1') {
+        btn.dataset.armed = '1';
+        btn.textContent = 'Delete story?';
+        setTimeout(() => {
+          if (btn.dataset.armed === '1') { btn.dataset.armed = ''; btn.textContent = 'Delete'; }
+        }, 4000);
+        return;
+      }
+      btn.disabled = true; btn.textContent = 'Deleting…';
+      let res = await del(false);
+      if (res.status === 409) {
+        // Playthroughs exist. Say how many and make it a separate decision —
+        // deleting a story should never quietly take saved games with it.
+        const msg = (await res.json()).detail || 'playthroughs exist';
+        btn.disabled = false;
+        btn.dataset.armed = '2';
+        btn.textContent = `${msg} — delete anyway?`;
+        btn.onclick = async (ev) => {
+          ev.stopPropagation();
+          btn.disabled = true; btn.textContent = 'Deleting…';
+          const forced = await del(true);
+          if (forced.ok) { card.remove(); load(); }
+          else { btn.disabled = false; btn.textContent = 'Failed — retry'; }
+        };
+        return;
+      }
+      if (res.ok) { card.remove(); load(); }
+      else { btn.disabled = false; btn.textContent = 'Failed — retry'; }
+    };
+    box.append(card);
+  }
+}
+
+async function debug() {
+  try {
+    const d = await fetch('/api/debug').then(r => r.json());
+    const b = d.broker;
+    document.getElementById('debug').textContent =
+      `comfyui ${d.comfy_up ? 'up' : 'down'} · ollama ${d.ollama_up ? 'up' : 'down'}`
+      + ` · gpu ${b.vram_used_mib}/${b.vram_used_mib + (b.vram_free_mib ?? 0)} MiB`
+      + ` · ${b.state}`
+      + ` · ${d.config.image.unet} @ ${d.config.image.width}×${d.config.image.height}`
+      + `/${d.config.image.steps} steps`;
+  } catch {
+    document.getElementById('debug').textContent = 'server unreachable';
+  }
+}
+
+load(); debug(); setInterval(debug, 5000);
+</script>

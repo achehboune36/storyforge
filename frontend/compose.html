@@ -1,0 +1,145 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>StoryForge — new story</title>
+<link rel="stylesheet" href="/style.css">
+
+<div class="topbar">
+  <a href="/">← library</a>
+  <span id="editing"></span>
+</div>
+
+<div class="wrap wide">
+  <h1>Define a story</h1>
+  <p class="sub">A world and an opening scene. Nothing about where it goes — that is the player's.</p>
+
+  <div class="row3">
+    <div class="grow2"><label>Title</label><input id="title" type="text" placeholder="The Lantern House"></div>
+    <div><label>Id <span class="hint">filename</span></label><input id="id" type="text" placeholder="lantern"></div>
+    <div><label>Rating</label>
+      <select id="rating">
+        <option value="all">All ages</option>
+        <option value="13+" selected>13+</option>
+        <option value="18+">18+</option>
+      </select></div>
+  </div>
+
+  <label>Blurb <span class="hint">one line, shown in the library</span></label>
+  <input id="blurb" type="text" placeholder="A canal city that runs on secrets…">
+
+  <label>Premise <span class="hint">who the player is, where, and in what voice</span></label>
+  <textarea id="premise" rows="5" placeholder="You are the narrator of … told as an anime. Second person, present tense. The player is …"></textarea>
+
+  <label>World detail <span class="hint">how the world works — rules of magic, society, power. Written as description, never as instructions to the narrator</span></label>
+  <textarea id="world" rows="6" placeholder="Magic here is spoken aloud and costs the speaker something physical…"></textarea>
+
+  <label>Art style <span class="hint">appended to every image prompt, unchanged</span></label>
+  <textarea id="style" rows="3" placeholder="anime illustration, cel shaded, clean linework, warm lantern light, deep reds and golds, detailed background"></textarea>
+
+  <h2>Opening scene</h2>
+  <label>Opening text <span class="hint">what the reader sees before they act</span></label>
+  <textarea id="opentext" rows="7"></textarea>
+
+  <div class="row3">
+    <div class="grow2"><label>Opening image keywords</label>
+      <textarea id="openkw" rows="3" placeholder="ornate landing at night, warm lantern light, red silk panels, tall shuttered windows"></textarea></div>
+    <div><label>Entities in it <span class="hint">comma-separated keys</span></label>
+      <input id="openents" type="text" placeholder="lantern_house, ceren"></div>
+  </div>
+
+  <h2>Entities</h2>
+  <p class="sub">Appearance is frozen the first time it is used, and never shown to the narrator — it only
+  reaches the image model. Name a <strong>character</strong> here and in the opening to get a person in
+  the first picture rather than an empty room.</p>
+  <div id="ents"></div>
+  <button class="icon" id="addent">+ add entity</button>
+
+  <div class="saverow">
+    <button class="primary" id="save">Save story</button>
+    <span id="savestatus" class="sub"></span>
+  </div>
+</div>
+
+<script type="module">
+const $ = (id) => document.getElementById(id);
+const el = (h) => { const d = document.createElement('div'); d.innerHTML = h; return d.firstElementChild; };
+
+function entRow(e = {}) {
+  const row = el(`<div class="entrow">
+    <input class="k" type="text" placeholder="key" value="${e.key || ''}">
+    <select class="kind">
+      <option value="character">character</option>
+      <option value="place">place</option>
+    </select>
+    <input class="role" type="text" placeholder="role — shown to the narrator" value="${e.role || ''}">
+    <textarea class="app" rows="2" placeholder="appearance — image model only">${e.appearance || ''}</textarea>
+    <button class="icon danger rm">×</button>
+  </div>`);
+  if (e.kind) row.querySelector('.kind').value = e.kind;
+  row.querySelector('.rm').onclick = () => row.remove();
+  return row;
+}
+$('addent').onclick = () => $('ents').append(entRow());
+
+function collect() {
+  const ents = [...document.querySelectorAll('.entrow')].map(r => ({
+    key: r.querySelector('.k').value.trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_'),
+    kind: r.querySelector('.kind').value,
+    role: r.querySelector('.role').value.trim(),
+    appearance: r.querySelector('.app').value.trim(),
+  })).filter(e => e.key);
+
+  return {
+    id: $('id').value.trim(), title: $('title').value.trim(),
+    blurb: $('blurb').value.trim(), rating: $('rating').value,
+    premise: $('premise').value.trim(), world_detail: $('world').value.trim(),
+    style: $('style').value.trim(),
+    opening: {
+      text: $('opentext').value.trim(),
+      keywords: $('openkw').value.trim(),
+      entities: $('openents').value.split(',').map(s => s.trim()).filter(Boolean),
+    },
+    entities: ents,
+  };
+}
+
+function fill(d) {
+  $('id').value = d.id || ''; $('title').value = d.title || '';
+  $('blurb').value = d.blurb || ''; $('rating').value = d.rating || '13+';
+  $('premise').value = d.premise || ''; $('world').value = d.world_detail || '';
+  $('style').value = d.style || '';
+  $('opentext').value = d.opening?.text || '';
+  $('openkw').value = d.opening?.keywords || '';
+  $('openents').value = (d.opening?.entities || []).join(', ');
+  $('ents').innerHTML = '';
+  for (const [key, e] of Object.entries(d.entities || {}))
+    $('ents').append(entRow({ key, ...e }));
+}
+
+$('save').onclick = async () => {
+  const body = collect();
+  if (!body.id || !body.title) { $('savestatus').textContent = 'id and title are required'; return; }
+  $('save').disabled = true; $('savestatus').textContent = 'saving…';
+  try {
+    const r = await fetch('/api/stories', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error((await r.text()).slice(0, 400));
+    $('savestatus').textContent = 'saved — it is in the library now';
+  } catch (e) {
+    $('savestatus').textContent = 'failed: ' + e.message;
+  } finally { $('save').disabled = false; }
+};
+
+// ?edit=<id> loads an existing story into the form.
+const editId = new URLSearchParams(location.search).get('edit');
+if (editId) {
+  fetch(`/api/stories/${editId}/raw`).then(r => r.json()).then(d => {
+    fill(d);
+    $('editing').textContent = `editing ${editId}`;
+  });
+} else {
+  $('ents').append(entRow({ key: 'player', kind: 'character' }));
+}
+</script>

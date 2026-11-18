@@ -1,0 +1,15 @@
+data/
+__pycache__/
+*.pyc
+.venv/
+bench/results/*.csv
+.env
+
+# story content stays local; only the example story is published
+stories/*
+!stories/lighthouse.json
+reconstruct/
+bench/cost_probe.py
+.env*
+NEXT.md
+bench/narrator_eval.py

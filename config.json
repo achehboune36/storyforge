@@ -1,0 +1,82 @@
+{
+  "_comment": "Written by Phase 0. Every value here is measured, not estimated. See bench/results/ and PHASE0.md.",
+  "gpu": {
+    "mode": "image_only",
+    "_mode_rationale": "The narrator is cloud-hosted, so no LLM ever occupies this GPU. ComfyUI keeps it to itself and the broker's handoff machinery is inert \u2014 it stays only as a guard rail (foreign-job detection, headroom check, idle eviction).",
+    "device_total_mib": 12288,
+    "comfy_idle_mib": 7617,
+    "comfy_peak_mib": 11508,
+    "llm_resident_mib": 4014,
+    "worst_case_mib": 11508,
+    "_worst_case": "LLM loaded while ComfyUI idles. At num_ctx 4096 this is ~10967 MiB, leaving ~1321 MiB headroom.",
+    "min_headroom_mib": 600,
+    "_min_headroom": "Broker refuses to load the LLM below this and frees ComfyUI first. Below this we are in untested territory; E7's 461 MiB did survive, so this is conservative, not a cliff.",
+    "free_wait_timeout_s": 25,
+    "evict_wait_timeout_s": 15,
+    "idle_evict_s": 300
+  },
+  "image": {
+    "arch": "sdxl",
+    "checkpoint": "NoobAI-XL-v1.1.safetensors",
+    "_checkpoint": "SDXL-based anime model. GPU is free now that the narrator is cloud.",
+    "width": 832,
+    "height": 1216,
+    "_size": "SDXL native portrait. 1216 tall suits character shots and phone screens.",
+    "steps": 28,
+    "cfg": 5.0,
+    "sampler": "euler_ancestral",
+    "scheduler": "normal",
+    "preview_method": "latent2rgb",
+    "timeout_s": 600,
+    "max_images_per_turn": 3,
+    "portrait": {
+      "enabled": true,
+      "width": 832,
+      "height": 1216,
+      "steps": 30,
+      "cfg": 5.0,
+      "_why": "One reference portrait per character, generated from their frozen appearance. Scene images of that character then run PuLID against the portrait so the face stays the same between scenes."
+    },
+    "pulid": {
+      "enabled": true,
+      "model": "ip-adapter_pulid_sdxl_fp16.safetensors",
+      "method": "fidelity",
+      "weight": 0.9,
+      "start_at": 0.0,
+      "end_at": 1.0,
+      "_why": "PuLID for SDXL, already installed with insightface. Applied only to scenes that include a character who has a reference portrait."
+    },
+    "sampling": "eps",
+    "_sampling": "MEASURED, do not change without re-testing: v1.1 is eps-prediction. v1.1 + v_prediction renders uniform grey. The alternative checkpoint noobaiXLNAIXL_vPred10Version.safetensors needs sampling='v_prediction' and gives deeper contrast at ~50% more time (33.6s vs 22.7s). The user's saved workflows set v_prediction on v1.1, which is incorrect.",
+    "_params": "CFG 5-6, 25-30 steps, Euler a \u2014 Laxhar's recommended range, matching the user's tests.",
+    "alt_checkpoint": {
+      "checkpoint": "noobaiXLNAIXL_vPred10Version.safetensors",
+      "sampling": "v_prediction",
+      "note": "higher contrast, slower"
+    },
+    "_prompting": "No prompt text lives here. The quality stack, tag order, shot pool, negatives, per-rating content clauses and the portrait template are all in prompting.toml, re-read on every image. NoobAI wants danbooru TAGS, not prose - a CLIP encoder renders sentences flat and generic."
+  },
+  "llm": {
+    "provider": "cloud",
+    "cloud_host": "https://ollama.com",
+    "model": "deepseek-v4-pro:0813",
+    "_model": "Probed against mistral-large-4, glm-5.3, kimi-k3 and muse-spark-open. deepseek engaged on every probe including adult content, fastest at 5-6s, and returns 200-260 words unprompted. muse-spark-open was the only refusal.",
+    "num_ctx": 16000,
+    "num_predict": 4500,
+    "_num_predict": "Must clear the reasoning phase. These models emit `reasoning` before `content`; too small a cap returns empty content with finish_reason=length, which looks exactly like a refusal.",
+    "budget_per_turn_usd": 0.03,
+    "_budget": "Measured $0.00148/turn warm, 20x headroom. Cached input is 30x cheaper than fresh, so the system prompt must stay byte-identical across turns or every turn pays full price. Per-turn state goes in the user message.",
+    "measured_cost_warm_usd": 0.00148,
+    "local_fallback": "mistral-nemo:12b"
+  },
+  "comfy": {
+    "host": "http://127.0.0.1:8188",
+    "measured_free_s": 1.01,
+    "measured_reload_s": 8.5
+  },
+  "tuning_notes": {
+    "steps": "E3 measured linear scaling: ~1s fixed + 1.7s/step at 1024x1024. 12 steps costs 0.62x of 20. Images at 8/12/16/20 with a fixed seed are in ComfyUI/output/ for visual comparison - lower this once a human confirms quality holds.",
+    "resolution": "E4: 768x768 21.9s/9157 MiB peak; 768x1152 30.4s/9958; 1024x1024 35.2s/10456. 768x768 chosen for VRAM headroom, but it is square, which suits story illustration less well than a portrait frame. 768x1152 is affordable if headroom proves comfortable in practice.",
+    "cache_hazard": "ComfyUI serves an identical workflow from cache instantly. Any benchmark or retry MUST vary the seed or it silently reports a fake 0s generation. This bug bit twice during Phase 0 (E5 and E7)."
+  }
+}

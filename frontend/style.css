@@ -1,0 +1,358 @@
+:root {
+  --bg: #0f0e0c;
+  --panel: #17151220;
+  --ink: #e8e3d8;
+  --ink-dim: #9a9186;
+  --accent: #d9a441;
+  --line: #2b2723;
+  --radius: 4px;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.7 Georgia, 'Iowan Old Style', 'Times New Roman', serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--accent); }
+
+/* ── Library ──────────────────────────────────────────────────────────── */
+
+.wrap { max-width: 44rem; margin: 0 auto; padding: 3rem 1.25rem 6rem; }
+
+h1 {
+  font-size: 1.9rem; font-weight: normal; letter-spacing: .02em;
+  margin: 0 0 .25rem;
+}
+.sub { color: var(--ink-dim); margin: 0 0 2.5rem; font-size: .95rem; }
+
+h2 {
+  font: 600 .72rem/1 system-ui, sans-serif; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--ink-dim);
+  margin: 2.5rem 0 .9rem;
+}
+
+.card {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  background: #1a1815; border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 1rem 1.15rem; margin-bottom: .6rem;
+  color: inherit; font: inherit;
+  transition: border-color .15s, transform .15s;
+}
+.card:hover { border-color: var(--accent); transform: translateY(-1px); }
+.card .t { font-size: 1.1rem; }
+.card .b { color: var(--ink-dim); font-size: .9rem; margin-top: .3rem; }
+.card .m { color: var(--ink-dim); font-size: .78rem; margin-top: .45rem;
+           font-family: system-ui, sans-serif; }
+
+/* ── Reader ───────────────────────────────────────────────────────────── */
+
+#story { max-width: 38rem; margin: 0 auto; padding: 3rem 1.25rem 14rem; }
+
+.turn { margin-bottom: .5rem; }
+.turn p { margin: 0 0 1.15rem; }
+
+.action {
+  color: var(--accent); font-style: italic;
+  border-left: 2px solid var(--accent); padding-left: .85rem;
+  margin: 2rem 0 1.5rem;
+}
+
+/* Fixed-size box from birth: the image landing must never reflow the text
+   the reader is in the middle of. This is the detail that makes "never
+   blocks" actually feel non-blocking. */
+figure.slot {
+  margin: 1.6rem 0; padding: 0;
+  aspect-ratio: 1 / 1; width: 100%;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  overflow: hidden; position: relative; background: #131110;
+}
+/* contain, not cover: the frame is sized from the image's own dimensions, so
+   the two normally agree and this looks identical — but if they ever disagree
+   the picture letterboxes instead of being silently cropped. */
+figure.slot img {
+  width: 100%; height: 100%; object-fit: contain; display: block;
+  opacity: 0; transition: opacity .5s ease, filter 1.2s ease;
+}
+figure.slot img.shown { opacity: 1; }
+figure.slot img.preview { filter: blur(14px) saturate(.75); }
+
+.slot .badge {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  padding: .5rem .75rem;
+  font: 500 .72rem/1 system-ui, sans-serif; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--ink-dim);
+  background: linear-gradient(transparent, #0f0e0ccc 60%);
+  display: flex; align-items: center; gap: .5rem;
+}
+.slot .bar {
+  flex: 1; height: 2px; background: #ffffff1a; border-radius: 2px; overflow: hidden;
+}
+.slot .bar i { display: block; height: 100%; width: 0; background: var(--accent);
+               transition: width .4s ease; }
+
+.slot.queued::before {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(100deg, #ffffff00 30%, #ffffff0d 50%, #ffffff00 70%);
+  background-size: 220% 100%;
+  animation: shimmer 2.2s linear infinite;
+}
+@keyframes shimmer { to { background-position: -220% 0; } }
+
+.slot.failed .badge { color: #e08a7a; }
+.slot .retry {
+  background: none; border: 1px solid currentColor; color: inherit;
+  border-radius: 3px; padding: .15rem .5rem; cursor: pointer;
+  font: inherit; font-size: .72rem;
+}
+
+/* ── Composer ─────────────────────────────────────────────────────────── */
+
+#composer {
+  position: fixed; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(transparent, var(--bg) 22%);
+  padding: 3rem 1.25rem 1.25rem;
+}
+#composer .inner {
+  max-width: 38rem; margin: 0 auto; display: flex; gap: .6rem;
+  align-items: flex-end;
+}
+#action {
+  flex: 1; resize: none; background: #1a1815; color: var(--ink);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  padding: .7rem .85rem; font: inherit; font-size: .98rem; line-height: 1.5;
+  min-height: 2.9rem; max-height: 9rem;
+}
+#action:focus { outline: none; border-color: var(--accent); }
+#send {
+  background: var(--accent); color: #1a1508; border: 0;
+  border-radius: var(--radius); padding: .78rem 1.1rem; cursor: pointer;
+  font: 600 .9rem system-ui, sans-serif;
+}
+#send:disabled { opacity: .45; cursor: default; }
+
+#status {
+  max-width: 38rem; margin: .5rem auto 0; min-height: 1.1rem;
+  font: .76rem/1.1 system-ui, sans-serif; color: var(--ink-dim);
+}
+#status .dot { color: var(--accent); }
+
+.topbar {
+  position: fixed; top: 0; left: 0; right: 0; padding: .8rem 1.25rem;
+  display: flex; justify-content: space-between; align-items: center;
+  background: linear-gradient(var(--bg) 55%, transparent);
+  font: .8rem system-ui, sans-serif;
+}
+.topbar a { text-decoration: none; color: var(--ink-dim); }
+.topbar a:hover { color: var(--accent); }
+
+@media (prefers-reduced-motion: reduce) {
+  .slot.queued::before { animation: none; }
+  figure.slot img { transition: none; }
+}
+
+/* ── Rating badge ─────────────────────────────────────────────────────── */
+.rating {
+  display: inline-block; margin-left: .5rem; padding: .08rem .4rem;
+  border: 1px solid currentColor; border-radius: 3px;
+  font: 600 .66rem/1.4 system-ui, sans-serif; letter-spacing: .06em;
+  vertical-align: middle;
+}
+.rating.r-all { color: #6fbf7a; }
+.rating.r-13  { color: #d9a441; }
+.rating.r-18  { color: #d9726a; }
+
+/* ── Card with actions ────────────────────────────────────────────────── */
+.card.row { display: flex; align-items: center; gap: 1rem; }
+.card.row .grow { flex: 1; min-width: 0; }
+
+.icon {
+  background: none; border: 1px solid var(--line); color: var(--ink-dim);
+  border-radius: var(--radius); padding: .32rem .6rem; cursor: pointer;
+  font: 500 .74rem system-ui, sans-serif; white-space: nowrap;
+  transition: color .15s, border-color .15s, background .15s;
+}
+.icon:hover { color: var(--ink); border-color: var(--ink-dim); }
+.icon.danger:hover { color: #e08a7a; border-color: #e08a7a; }
+/* Armed state: the second click is the destructive one, so it looks it. */
+.icon.danger[data-armed="1"] {
+  color: #1a1508; background: #e08a7a; border-color: #e08a7a;
+}
+.icon:disabled { opacity: .5; cursor: default; }
+
+/* ── Pass ─────────────────────────────────────────────────────────────── */
+#pass.ghost {
+  background: none; color: var(--ink-dim);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  padding: .78rem 1rem; cursor: pointer;
+  font: 500 .86rem system-ui, sans-serif;
+  transition: color .15s, border-color .15s;
+}
+#pass.ghost:hover:not(:disabled) { color: var(--ink); border-color: var(--ink-dim); }
+#pass.ghost:disabled { opacity: .4; cursor: default; }
+
+.turn.passed {
+  color: var(--ink-dim); font-style: italic; font-size: .88rem;
+  border-left: 2px solid var(--line); padding-left: .85rem;
+  margin: 2rem 0 1.5rem;
+}
+
+/* ── Lab / composer shared form styling ──────────────────────────────── */
+.lab { display: flex; gap: 1.5rem; padding: 4rem 1.5rem 3rem;
+       max-width: 78rem; margin: 0 auto; align-items: flex-start; }
+.lab .pane { flex: 1; min-width: 0; }
+.lab .pane.result { position: sticky; top: 4rem; }
+
+label { display: block; margin: 1rem 0 .3rem;
+        font: 600 .7rem/1 system-ui, sans-serif; letter-spacing: .12em;
+        text-transform: uppercase; color: var(--ink-dim); }
+.hint { text-transform: none; letter-spacing: 0; font-weight: 400; opacity: .8; }
+
+textarea, input[type=text], input[type=number], select {
+  width: 100%; background: #1a1815; color: var(--ink);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  padding: .6rem .75rem; font: inherit; font-size: .92rem; line-height: 1.5;
+  resize: vertical;
+}
+textarea:focus, input:focus, select:focus { outline: none; border-color: var(--accent); }
+
+.row3 { display: flex; gap: .7rem; align-items: flex-end; }
+.row3 > div { flex: 1; }
+.row3 > div.grow2 { flex: 3; }
+
+button#go, button.primary {
+  background: var(--accent); color: #1a1508; border: 0;
+  border-radius: var(--radius); padding: .62rem 1.1rem; cursor: pointer;
+  font: 600 .9rem system-ui, sans-serif; width: 100%;
+}
+button#go:disabled, button.primary:disabled { opacity: .45; cursor: default; }
+
+.presets { display: flex; gap: .4rem; align-items: center; margin-top: 1rem;
+           flex-wrap: wrap; }
+
+.outbox {
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: #131110; aspect-ratio: 1/1; display: flex;
+  align-items: center; justify-content: center; overflow: hidden;
+}
+.outbox img { width: 100%; height: 100%; object-fit: contain; display: block; }
+#info { margin-top: .6rem; font-family: system-ui, sans-serif; font-size: .78rem; }
+
+@media (max-width: 900px) { .lab { flex-direction: column; }
+                            .lab .pane.result { position: static; width: 100%; } }
+
+/* ── Composer ─────────────────────────────────────────────────────────── */
+.wrap.wide { max-width: 56rem; }
+
+.entrow {
+  display: grid; gap: .5rem; align-items: start;
+  grid-template-columns: 9rem 8rem 1fr 2rem;
+  grid-template-areas: "k kind role rm" "app app app app";
+  padding: .75rem; margin-bottom: .6rem;
+  border: 1px solid var(--line); border-radius: var(--radius); background: #1a1815;
+}
+.entrow .k { grid-area: k; } .entrow .kind { grid-area: kind; }
+.entrow .role { grid-area: role; } .entrow .app { grid-area: app; }
+.entrow .rm { grid-area: rm; padding: .3rem 0; }
+
+.saverow { display: flex; align-items: center; gap: 1rem; margin: 2rem 0 1rem; }
+.saverow .primary { width: auto; }
+.saverow .sub { margin: 0; }
+
+@media (max-width: 700px) {
+  .entrow { grid-template-columns: 1fr 2rem;
+            grid-template-areas: "k rm" "kind kind" "role role" "app app"; }
+}
+
+
+/* ── Mobile ───────────────────────────────────────────────────────────── */
+/* Tested target: a phone in portrait. Three things matter — the composer must
+   not be hidden by the on-screen keyboard, touch targets must be reachable
+   with a thumb, and the reading column must not be squeezed by desktop
+   padding. */
+
+.bar {
+  max-width: 38rem; margin: .5rem auto 0;
+  display: flex; align-items: center; gap: .5rem;
+  font: .76rem/1.1 system-ui, sans-serif; color: var(--ink-dim);
+}
+.bar .ghost {
+  background: none; color: var(--ink-dim); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: .4rem .7rem; cursor: pointer;
+  font: 500 .78rem system-ui, sans-serif; white-space: nowrap;
+}
+.bar .ghost:hover:not(:disabled) { color: var(--ink); border-color: var(--ink-dim); }
+.bar .ghost:disabled { opacity: .4; cursor: default; }
+#status { flex: 1; text-align: right; }
+
+/* Respect the notch and home indicator. */
+#composer { padding-bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px)); }
+.topbar   { padding-top: calc(.8rem + env(safe-area-inset-top, 0px)); }
+
+@media (max-width: 760px) {
+  body { font-size: 17px; }                 /* comfortable reading on a phone */
+  #story { padding: 4rem .95rem 16rem; }
+  .wrap  { padding: 3.5rem .95rem 5rem; }
+  .lab   { padding: 4rem .95rem 3rem; }
+
+  h1 { font-size: 1.5rem; }
+  .turn p { margin-bottom: 1rem; }
+
+  /* Images are portrait 832x1216; cap them so one does not fill the screen
+     and bury the text under it. */
+  figure.slot { max-height: 68vh; }
+
+  #composer .inner { gap: .45rem; }
+  #action { font-size: 16px; }              /* <16px makes iOS zoom on focus */
+  #send   { padding: .78rem .9rem; }
+  .bar    { flex-wrap: wrap; }
+  .bar .ghost { padding: .5rem .8rem; }     /* bigger thumb target */
+
+  /* Cards become stacked rather than squeezed. */
+  .card.row { flex-wrap: wrap; }
+  .card.row .grow { flex-basis: 100%; }
+  .entrow { grid-template-columns: 1fr 2rem;
+            grid-template-areas: "k rm" "kind kind" "role role" "app app"; }
+}
+
+@media (max-width: 420px) {
+  #story { padding-left: .75rem; padding-right: .75rem; }
+  .topbar { font-size: .74rem; }
+}
+
+/* ── image lab: model switcher + generation progress ───────────────────── */
+.lab select {
+  width: 100%; padding: .6rem .7rem; background: var(--panel);
+  color: var(--ink); border: 1px solid var(--line); border-radius: 7px;
+  font: inherit; font-size: .9rem;
+}
+.lab select:focus { outline: none; border-color: var(--accent); }
+.modelnote { margin: .45rem 0 1.2rem; font-size: .8rem; line-height: 1.45; }
+
+/* Hidden until a render starts, so the pane is not cluttered at rest. */
+.labprog { display: none; align-items: center; gap: .6rem; margin-top: .6rem;
+           font-size: .78rem; color: var(--ink-dim);
+           font-family: system-ui, sans-serif; }
+.labprog.on { display: flex; }
+.labprog .bar { flex: 1; height: 3px; background: var(--line);
+                border-radius: 2px; overflow: hidden; }
+.labprog .bar i { display: block; height: 100%; width: 0;
+                  background: var(--accent); transition: width .2s linear; }
+/* latent previews are abstract colour fields; blurring reads as "developing" */
+.outbox img.preview { filter: blur(6px); }
+#info { white-space: pre-line; }
+
+/* ── model switcher in the reading view ────────────────────────────────── */
+#modelpick {
+  background: transparent; color: var(--ink-dim); border: 1px solid var(--line);
+  border-radius: 999px; padding: .35rem .6rem; font: inherit; font-size: .78rem;
+  max-width: 11rem;
+}
+#modelpick:hover { color: var(--ink); border-color: var(--ink-dim); }
+#modelpick:focus { outline: none; border-color: var(--accent); }
+@media (max-width: 760px) { #modelpick { max-width: 8rem; } }

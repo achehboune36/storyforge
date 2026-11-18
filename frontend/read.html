@@ -1,0 +1,28 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>StoryForge — reading</title>
+<link rel="stylesheet" href="/style.css">
+
+<div class="topbar">
+  <a href="/">← library</a>
+  <span id="conn"></span>
+</div>
+
+<article id="story"></article>
+
+<div id="composer">
+  <div class="inner">
+    <textarea id="action" rows="1" placeholder="What do you do?"
+              autocomplete="off"></textarea>
+    <button id="send">Act</button>
+  </div>
+  <div class="bar">
+    <button id="pass" class="ghost" title="Let the story carry on without you">▶ Continue</button>
+    <button id="undo" class="ghost" title="Undo the last exchange and take it a different way">↶ Undo</button>
+    <select id="modelpick" title="Image model — applies to the next picture"></select>
+    <span id="status"></span>
+  </div>
+</div>
+
+<script type="module" src="/story.js"></script>
